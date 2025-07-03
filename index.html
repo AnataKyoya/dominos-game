@@ -86,6 +86,10 @@
       font-weight: bold;
       border: 2px solid black !important;
     }
+    #difficulty {
+      margin-bottom: 10px;
+      font-size: 16px;
+    }
   </style>
 </head>
 <body>
@@ -93,8 +97,15 @@
     <h1>Permainan Domino Otomatis</h1>
   </header>
   <main>
+    <select id="difficulty">
+      <option value="">Pilih Tingkat Kesulitan</option>
+      <option value="easy">Mudah</option>
+      <option value="hard">Sulit</option>
+      <option value="pro">Profesional</option>
+    </select>
+
     <div class="controls">
-      <button onclick="startGame()">Mulai Permainan</button>
+      <button id="startGame" onclick="startGame()" disabled>Mulai Permainan</button>
       <button id="skipButton" onclick="skipTurn()" style="display:none; margin-left: 10px;">Lewati</button>
     </div>
     <div class="game-board" id="board"></div>
@@ -102,6 +113,13 @@
   </main>
 
   <script>
+    const startButton = document.getElementById("startGame");
+    const difficultySelect = document.getElementById("difficulty");
+
+    difficultySelect.addEventListener("change", () => {
+      startButton.disabled = !difficultySelect.value;
+    });
+
     const fullSet = [];
     for (let i = 0; i <= 6; i++) {
       for (let j = i; j <= 6; j++) {
@@ -116,6 +134,8 @@
     let currentPlayer = 0;
     let gameOver = false;
     const playerId = 0;
+    let aiMode = "easy";
+    let angkaMuncul = Array(7).fill(0);
 
     function shuffle(arr) {
       for (let i = arr.length - 1; i > 0; i--) {
@@ -125,52 +145,70 @@
     }
 
     function startGame() {
-  const deck = [...fullSet];
-  shuffle(deck);
-  for (let i = 0; i < 28; i++) {
-    players[i % 4].push(deck[i]);
-  }
-
-  board = [];
-  cardOwners = [];
-  gameOver = false;
-
-  // Cari pemain yang memiliki kartu 6|6
-  let startingPlayerFound = false;
-  for (let i = 0; i < players.length; i++) {
-    for (let card of players[i]) {
-      if ((card[0] === 6 && card[1] === 6)) {
-        currentPlayer = i;
-        startingPlayerFound = true;
-        break;
-      }
+        aiMode = difficultySelect.value;
+        if (!aiMode) return;
+        
+        startButton.style.display = "none";
+        difficultySelect.style.display = "none";
+        
+        const deck = [...fullSet];
+        shuffle(deck);
+        
+        
+        for (let i = 0; i < 4; i++) {
+            players[i].push(...deck.splice(0, 7));
+        }
+        
+        board = [];
+        cardOwners = [];
+        angkaMuncul = Array(7).fill(0);
+        gameOver = false;
+        
+        // Cari pemain yang punya 6|6
+        for (let i = 0; i < players.length; i++) {
+            const idx = players[i].findIndex(card => card[0] === 6 && card[1] === 6);
+            if (idx !== -1) {
+                const doubleSix = players[i].splice(idx, 1)[0]; // hapus dari tangan
+                board.push(doubleSix);
+                cardOwners.push(i);
+                doubleSix.forEach(n => angkaMuncul[n]++);
+                currentPlayer = (i + 1) % 4; // pemain selanjutnya yang jalan
+                break;
+            }
+        }
+        
+        updateUI();
+        setTimeout(playTurn, 1000);
     }
-    if (startingPlayerFound) break;
-  }
-
-  updateUI();
-  setTimeout(playTurn, 1000);
-}
 
     function isValidMove(card) {
-      return board.length === 0 ||
-        card.includes(board[0][0]) ||
-        card.includes(board[board.length - 1][1]);
+      return board.length === 0 || card.includes(board[0][0]) || card.includes(board[board.length - 1][1]);
     }
 
     function placeCard(card) {
       if (board.length === 0) {
         board.push(card);
         cardOwners.push(currentPlayer);
+        card.forEach(n => angkaMuncul[n]++);
       } else if (card.includes(board[board.length - 1][1])) {
         const newCard = card[0] === board[board.length - 1][1] ? card : [card[1], card[0]];
         board.push(newCard);
         cardOwners.push(currentPlayer);
+        card.forEach(n => angkaMuncul[n]++);
       } else if (card.includes(board[0][0])) {
         const newCard = card[1] === board[0][0] ? card : [card[1], card[0]];
         board.unshift(newCard);
         cardOwners.unshift(currentPlayer);
+        card.forEach(n => angkaMuncul[n]++);
       }
+    }
+    
+    function isBlockingMove(card) {
+      const [a, b] = card;
+      const aCount = angkaMuncul[a];
+      const bCount = angkaMuncul[b];
+      // Jika angka sudah muncul 6 kali, lawan kemungkinan tidak punya sisa
+      return (aCount >= 6 || bCount >= 6);
     }
 
     function playTurn() {
@@ -184,39 +222,80 @@
         document.getElementById("skipButton").style.display = valid.length === 0 ? "inline-block" : "none";
       } else {
         if (valid.length > 0) {
-  // Hitung frekuensi angka di tangan AI
-  const freq = {};
-  hand.forEach(([a, b]) => {
-    freq[a] = (freq[a] || 0) + 1;
-    freq[b] = (freq[b] || 0) + 1;
-  });
+          if (aiMode === "easy") {
+            const [a, b] = valid[0];
+            const index = hand.findIndex(c => c[0] === a && c[1] === b);
+            players[currentPlayer].splice(index, 1);
+            placeCard(valid[0]);
+          } else if (aiMode === "hard") {
+            const freq = {};
+            hand.forEach(([a, b]) => {
+              freq[a] = (freq[a] || 0) + 1;
+              freq[b] = (freq[b] || 0) + 1;
+            });
 
-  // Beri skor ke setiap kartu valid berdasarkan frekuensi dan nilai total
-  const scored = valid.map(card => {
-    const [a, b] = card;
-    const score = (freq[a] + freq[b]) * 10 + (a + b); // bobot utama: frekuensi, sekunder: nilai
-    return { card, score };
-  });
+            const scored = valid.map(card => {
+              const [a, b] = card;
+              const score = (freq[a] + freq[b]) * 10 + (a + b);
+              return { card, score };
+            });
 
-  // Urutkan kartu dari skor tertinggi ke terendah
-  scored.sort((x, y) => y.score - x.score);
+            scored.sort((x, y) => y.score - x.score);
+            
+            const chosen = scored[0].card;
+            const index = hand.findIndex(c => c[0] === chosen[0] && c[1] === chosen[1]);
+            players[currentPlayer].splice(index, 1);
+            placeCard(chosen);
+          } else if (aiMode === "pro") {
+            const freq = {};
+            hand.forEach(([a, b]) => {
+              freq[a] = (freq[a] || 0) + 1;
+              freq[b] = (freq[b] || 0) + 1;
+            });
 
-  // Pilih kartu dengan skor tertinggi
-  const chosen = scored[0].card;
-  const index = hand.findIndex(c => c[0] === chosen[0] && c[1] === chosen[1]);
-  players[currentPlayer].splice(index, 1);
-  placeCard(chosen);
+            const scored = valid.map(card => {
+              const [a, b] = card;
+              const score = (freq[a] + freq[b]) * 10 + (a + b);
+              return { card, score };
+            });
 
-  if (players[currentPlayer].length === 0) {
-    alert(`Pemain ${currentPlayer + 1} menang!`);
-    gameOver = true;
-    return;
-  }
-}
+            scored.sort((x, y) => {
+              const xBlock = isBlockingMove(x.card);
+              const yBlock = isBlockingMove(y.card);
+
+              // Prioritaskan kartu yang bisa blocking
+              if (xBlock && !yBlock) return -1;
+              if (!xBlock && yBlock) return 1;
+
+              // Jika dua-duanya blocking atau tidak, bandingkan skor biasa
+              return y.score - x.score;
+            });
+            
+            const chosen = scored[0].card;
+            const index = hand.findIndex(c => c[0] === chosen[0] && c[1] === chosen[1]);
+            players[currentPlayer].splice(index, 1);
+            placeCard(chosen);
+          }
+
+          if (players[currentPlayer].length === 0) {
+            alert(`Pemain ${currentPlayer + 1} menang!`);
+            gameOver = true;
+            showControlsAgain();
+            return;
+          }
+        }
+
         currentPlayer = (currentPlayer + 1) % 4;
         updateUI();
         setTimeout(playTurn, 1000);
       }
+    }
+
+    function showControlsAgain() {
+      startButton.style.display = "inline-block";
+      difficultySelect.style.display = "inline-block";
+      startButton.disabled = true;
+      difficultySelect.value = "";
     }
 
     function playerClickCard(index) {
@@ -232,6 +311,7 @@
       if (players[playerId].length === 0) {
         alert("Kamu menang!");
         gameOver = true;
+        showControlsAgain();
         return;
       }
 
