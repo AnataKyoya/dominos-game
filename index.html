@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Domino Otomatis</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #f4f4f4;
+    }
+    header {
+      background: #2c3e50;
+      color: white;
+      text-align: center;
+      padding: 1rem;
+    }
+    main {
+      max-width: 1000px;
+      margin: 20px auto;
+      padding: 20px;
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    .controls {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      background: #2980b9;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #3498db;
+    }
+    .game-board {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+      padding: 10px;
+      border: 2px dashed #ccc;
+      margin-bottom: 30px;
+    }
+    .domino-card {
+      width: 60px;
+      height: 100px;
+      background: #fff;
+      border: 3px solid #333;
+      border-radius: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      position: relative;
+      cursor: pointer;
+      user-select: none;
+    }
+    .domino-card::before {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 5%;
+      width: 90%;
+      height: 2px;
+      background: #333;
+    }
+    .player-hand h2 {
+      text-align: center;
+      margin-bottom: 5px;
+      padding: 5px;
+      border-radius: 5px;
+    }
+    .highlight {
+      font-weight: bold;
+      border: 2px solid black !important;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Permainan Domino Otomatis</h1>
+  </header>
+  <main>
+    <div class="controls">
+      <button onclick="startGame()">Mulai Permainan</button>
+      <button id="skipButton" onclick="skipTurn()" style="display:none; margin-left: 10px;">Lewati</button>
+    </div>
+    <div class="game-board" id="board"></div>
+    <div class="player-hand" id="hands"></div>
+  </main>
+
+  <script>
+    const fullSet = [];
+    for (let i = 0; i <= 6; i++) {
+      for (let j = i; j <= 6; j++) {
+        fullSet.push([i, j]);
+      }
+    }
+
+    const playerColors = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12'];
+    const players = [[], [], [], []];
+    let board = [];
+    let cardOwners = [];
+    let currentPlayer = 0;
+    let gameOver = false;
+    const playerId = 0;
+
+    function shuffle(arr) {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+    }
+
+    function startGame() {
+  const deck = [...fullSet];
+  shuffle(deck);
+  for (let i = 0; i < 28; i++) {
+    players[i % 4].push(deck[i]);
+  }
+
+  board = [];
+  cardOwners = [];
+  gameOver = false;
+
+  // Cari pemain yang memiliki kartu 6|6
+  let startingPlayerFound = false;
+  for (let i = 0; i < players.length; i++) {
+    for (let card of players[i]) {
+      if ((card[0] === 6 && card[1] === 6)) {
+        currentPlayer = i;
+        startingPlayerFound = true;
+        break;
+      }
+    }
+    if (startingPlayerFound) break;
+  }
+
+  updateUI();
+  setTimeout(playTurn, 1000);
+}
+
+    function isValidMove(card) {
+      return board.length === 0 ||
+        card.includes(board[0][0]) ||
+        card.includes(board[board.length - 1][1]);
+    }
+
+    function placeCard(card) {
+      if (board.length === 0) {
+        board.push(card);
+        cardOwners.push(currentPlayer);
+      } else if (card.includes(board[board.length - 1][1])) {
+        const newCard = card[0] === board[board.length - 1][1] ? card : [card[1], card[0]];
+        board.push(newCard);
+        cardOwners.push(currentPlayer);
+      } else if (card.includes(board[0][0])) {
+        const newCard = card[1] === board[0][0] ? card : [card[1], card[0]];
+        board.unshift(newCard);
+        cardOwners.unshift(currentPlayer);
+      }
+    }
+
+    function playTurn() {
+      if (gameOver) return;
+      updateUI();
+
+      const hand = players[currentPlayer];
+      const valid = hand.filter(isValidMove);
+
+      if (currentPlayer === playerId) {
+        document.getElementById("skipButton").style.display = valid.length === 0 ? "inline-block" : "none";
+      } else {
+        if (valid.length > 0) {
+  // Hitung frekuensi angka di tangan AI
+  const freq = {};
+  hand.forEach(([a, b]) => {
+    freq[a] = (freq[a] || 0) + 1;
+    freq[b] = (freq[b] || 0) + 1;
+  });
+
+  // Beri skor ke setiap kartu valid berdasarkan frekuensi dan nilai total
+  const scored = valid.map(card => {
+    const [a, b] = card;
+    const score = (freq[a] + freq[b]) * 10 + (a + b); // bobot utama: frekuensi, sekunder: nilai
+    return { card, score };
+  });
+
+  // Urutkan kartu dari skor tertinggi ke terendah
+  scored.sort((x, y) => y.score - x.score);
+
+  // Pilih kartu dengan skor tertinggi
+  const chosen = scored[0].card;
+  const index = hand.findIndex(c => c[0] === chosen[0] && c[1] === chosen[1]);
+  players[currentPlayer].splice(index, 1);
+  placeCard(chosen);
+
+  if (players[currentPlayer].length === 0) {
+    alert(`Pemain ${currentPlayer + 1} menang!`);
+    gameOver = true;
+    return;
+  }
+}
+        currentPlayer = (currentPlayer + 1) % 4;
+        updateUI();
+        setTimeout(playTurn, 1000);
+      }
+    }
+
+    function playerClickCard(index) {
+      if (gameOver || currentPlayer !== playerId) return;
+
+      const hand = players[playerId];
+      const card = hand[index];
+      if (!isValidMove(card)) return;
+
+      players[playerId].splice(index, 1);
+      placeCard(card);
+
+      if (players[playerId].length === 0) {
+        alert("Kamu menang!");
+        gameOver = true;
+        return;
+      }
+
+      document.getElementById("skipButton").style.display = "none";
+      currentPlayer = (currentPlayer + 1) % 4;
+      updateUI();
+      setTimeout(playTurn, 1000);
+    }
+
+    function skipTurn() {
+      if (gameOver || currentPlayer !== playerId) return;
+      document.getElementById("skipButton").style.display = "none";
+      currentPlayer = (currentPlayer + 1) % 4;
+      updateUI();
+      setTimeout(playTurn, 1000);
+    }
+
+    function updateUI() {
+      const boardDiv = document.getElementById("board");
+      boardDiv.innerHTML = "";
+      for (let i = 0; i < board.length; i++) {
+        const card = board[i];
+        const ownerIndex = cardOwners[i];
+        const div = document.createElement("div");
+        div.className = "domino-card";
+        div.style.borderColor = playerColors[ownerIndex];
+        div.innerHTML = `<div>${card[0]}</div><div>${card[1]}</div>`;
+        boardDiv.appendChild(div);
+      }
+
+      const handsDiv = document.getElementById("hands");
+      handsDiv.innerHTML = "";
+
+      players.forEach((hand, index) => {
+        const container = document.createElement("div");
+        const color = playerColors[index];
+
+        const isActive = currentPlayer === index;
+        const h2 = document.createElement("h2");
+        h2.textContent = index === playerId ? 'Kartu Kamu' : 'Pemain ' + (index + 1);
+        h2.style.color = "white";
+        h2.style.background = color;
+        h2.style.border = isActive ? "3px solid black" : "none";
+        container.appendChild(h2);
+
+        const row = document.createElement("div");
+        row.className = "game-board";
+
+        hand.forEach((card, i) => {
+          const div = document.createElement("div");
+          div.className = "domino-card";
+          div.style.borderColor = color;
+
+          if (index === playerId) {
+            div.innerHTML = `<div>${card[0]}</div><div>${card[1]}</div>`;
+            div.onclick = () => playerClickCard(i);
+          } else {
+            div.innerHTML = "<div>?</div><div>?</div>";
+          }
+
+          row.appendChild(div);
+        });
+
+        container.appendChild(row);
+        handsDiv.appendChild(container);
+      });
+    }
+  </script>
+</body>
+</html>
