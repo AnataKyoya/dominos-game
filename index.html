@@ -415,6 +415,12 @@
         updateUI();
         setTimeout(playTurn, 1000);
       }
+      
+      if (players[playerId].length === 0) {
+        alert("Kamu menang!");
+        gameOver = true;
+        return;
+      }
     }
 
     function skipTurn() {
