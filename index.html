@@ -130,8 +130,6 @@
         [5, 5], [6, 4], [5, 6], [6, 6]
     ];
     
-    let shuffledCard = [];
-    
     // (let i = 0; i <= 6; i++) {
     //  for (let j = i; j <= 6; j++) {
     //    fullSet.push([i, j]);
@@ -139,7 +137,7 @@
     //}
 
     const playerColors = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12'];
-    const players = [[], [], [], []];
+    let players = [[], [], [], []];
     let board = [];
     let cardOwners = [];
     let currentPlayer = 0;
@@ -149,10 +147,12 @@
     let angkaMuncul = Array(7).fill(0);
 
     function shuffle(arr) {
-      for (let i = arr.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
+      const shuffledCard = [];
+      while (arr.length > 0) {
+        const j = Math.floor(Math.random() * arr.length);
         shuffledCard.push(...arr.splice(j, 1));
       }
+      return shuffledCard;
     }
 
     function startGame() {
@@ -162,16 +162,11 @@
         startButton.style.display = "none";
         difficultySelect.style.display = "none";
         
-        const deck = [...fullSet];
-        shuffle(deck);
-        
-        const res = [...shuffledCard]
-        
-        for (let i = 0; i < 7; i++) {
-            for (let j = 0; j < 4; j++){
-                players[j].push(...res.splice(i, 1));
-            }
-            
+        const shuffled = shuffle(fullSet);
+        players = [[], [], [], []];
+
+        for (let i = 0; i < 28; i++) {
+          players[i % 4].push(shuffled[i]);
         }
         
         board = [];
@@ -225,6 +220,26 @@
       // Jika angka sudah muncul 6 kali, lawan kemungkinan tidak punya sisa
       return (aCount >= 6 || bCount >= 6);
     }
+    
+    function estimasiAngkaDimilikiLawan() {
+      const totalKemunculan = angkaMuncul.slice(); // salin array
+      const tanganAI = players[currentPlayer];
+    
+      // Kurangi frekuensi angka dari tangan AI sendiri
+      tanganAI.forEach(([a, b]) => {
+        totalKemunculan[a]--;
+        totalKemunculan[b]--;
+      });
+
+      // Buat estimasi angka yang masih tersebar di pemain lain
+      const estimasi = [];
+      for (let i = 0; i <= 6; i++) {
+        if (totalKemunculan[i] < 7) {
+          estimasi.push(i);
+        }
+      }
+      return estimasi;
+    }
 
     function playTurn() {
       if (gameOver) return;
@@ -267,24 +282,27 @@
               freq[a] = (freq[a] || 0) + 1;
               freq[b] = (freq[b] || 0) + 1;
             });
-
+            
+            const estimasiLawan = estimasiAngkaDimilikiLawan();
+            
             const scored = valid.map(card => {
-              const [a, b] = card;
-              const score = (freq[a] + freq[b]) * 10 + (a + b);
-              return { card, score };
+                const [a, b] = card;
+                let score = 0;
+                const isDouble = a === b;
+                if (isDouble) score -= 15;
+                score += (freq[a] + freq[b]) * 10;
+                score += (a + b);
+                if (angkaMuncul[a] > 3) score -= 5;
+                if (angkaMuncul[b] > 3) score -= 5;
+                if (estimasiLawan.includes(a)) score -= 8; // penalti jika AI membuka angka yang lawan mungkin punya
+                if (estimasiLawan.includes(b)) score -= 8;
+                if (isBlockingMove(card)) score += 30; // Strategi blocking
+                return { card, score };
             });
 
-            scored.sort((x, y) => {
-              const xBlock = isBlockingMove(x.card);
-              const yBlock = isBlockingMove(y.card);
-
-              // Prioritaskan kartu yang bisa blocking
-              if (xBlock && !yBlock) return -1;
-              if (!xBlock && yBlock) return 1;
-
-              // Jika dua-duanya blocking atau tidak, bandingkan skor biasa
-              return y.score - x.score;
-            });
+            scored.sort((x, y) =>
+              y.score - x.score
+            );
             
             const chosen = scored[0].card;
             const index = hand.findIndex(c => c[0] === chosen[0] && c[1] === chosen[1]);
