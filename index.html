@@ -76,6 +76,19 @@
       height: 2px;
       background: #333;
     }
+    .domino-card.landscape {
+      width: 100px;
+      height: 60px;
+      flex-direction: row;
+      gap: 25px;
+    }
+    .domino-card.landscape::before {
+      top: 5%;
+      left: 50%;
+      width: 2px;
+      height: 90%;
+      transform: translateX(-50%);
+    }
     .player-hand h2 {
       text-align: center;
       margin-bottom: 5px;
@@ -89,6 +102,25 @@
     #difficulty {
       margin-bottom: 10px;
       font-size: 16px;
+    }
+    #placementModal {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: rgba(0,0,0,0.5);
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    #placementModal .modal-content {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      text-align: center;
+    }
+    #placementModal button {
+      margin: 10px;
+      width: 100px;
     }
   </style>
 </head>
@@ -111,6 +143,13 @@
     <div class="game-board" id="board"></div>
     <div class="player-hand" id="hands"></div>
   </main>
+  <div id="placementModal">
+    <div class="modal-content">
+      <p>Pilih sisi penempatan kartu:</p>
+      <button onclick="confirmPlacement('left')">Kiri</button>
+      <button onclick="confirmPlacement('right')">Kanan</button>
+    </div>
+  </div>
 
   <script>
     const startButton = document.getElementById("startGame");
@@ -145,6 +184,28 @@
     const playerId = 0;
     let aiMode = "easy";
     let angkaMuncul = Array(7).fill(0);
+    
+    let selectedCardIndex = null;
+    let pendingPlacement = null;
+
+    function canPlaceLeft(card) {
+      return board.length === 0 || card.includes(board[0][0]);
+    }
+
+    function canPlaceRight(card) {
+      return board.length === 0 || card.includes(board[board.length - 1][1]);
+    }
+
+    function confirmPlacement(side) {
+      const card = players[playerId][selectedCardIndex];
+      players[playerId].splice(selectedCardIndex, 1);
+      placeCard(card, side);
+      document.getElementById("placementModal").style.display = "none";
+      selectedCardIndex = null;
+      currentPlayer = (currentPlayer + 1) % 4;
+      updateUI();
+      setTimeout(playTurn, 1000);
+    }
 
     function shuffle(arr) {
       const shuffledCard = [];
@@ -195,22 +256,20 @@
       return board.length === 0 || card.includes(board[0][0]) || card.includes(board[board.length - 1][1]);
     }
 
-    function placeCard(card) {
+    function placeCard(card, side = null) {
       if (board.length === 0) {
         board.push(card);
         cardOwners.push(currentPlayer);
-        card.forEach(n => angkaMuncul[n]++);
-      } else if (card.includes(board[board.length - 1][1])) {
+      } else if (side === 'right' || (side === null && card.includes(board[board.length - 1][1]))) {
         const newCard = card[0] === board[board.length - 1][1] ? card : [card[1], card[0]];
         board.push(newCard);
         cardOwners.push(currentPlayer);
-        card.forEach(n => angkaMuncul[n]++);
-      } else if (card.includes(board[0][0])) {
+      } else if (side === 'left' || (side === null && card.includes(board[0][0]))) {
         const newCard = card[1] === board[0][0] ? card : [card[1], card[0]];
         board.unshift(newCard);
         cardOwners.unshift(currentPlayer);
-        card.forEach(n => angkaMuncul[n]++);
       }
+      card.forEach(n => angkaMuncul[n]++);
     }
     
     function isBlockingMove(card) {
@@ -333,25 +392,29 @@
 
     function playerClickCard(index) {
       if (gameOver || currentPlayer !== playerId) return;
-
       const hand = players[playerId];
       const card = hand[index];
       if (!isValidMove(card)) return;
 
-      players[playerId].splice(index, 1);
-      placeCard(card);
+      const canLeft = canPlaceLeft(card);
+      const canRight = canPlaceRight(card);
 
-      if (players[playerId].length === 0) {
-        alert("Kamu menang!");
-        gameOver = true;
-        showControlsAgain();
-        return;
+      if (canLeft && canRight) {
+        selectedCardIndex = index;
+        document.getElementById("placementModal").style.display = "flex";
+      } else if (canLeft) {
+        players[playerId].splice(index, 1);
+        placeCard(card, 'left');
+        currentPlayer = (currentPlayer + 1) % 4;
+        updateUI();
+        setTimeout(playTurn, 1000);
+      } else if (canRight) {
+        players[playerId].splice(index, 1);
+        placeCard(card, 'right');
+        currentPlayer = (currentPlayer + 1) % 4;
+        updateUI();
+        setTimeout(playTurn, 1000);
       }
-
-      document.getElementById("skipButton").style.display = "none";
-      currentPlayer = (currentPlayer + 1) % 4;
-      updateUI();
-      setTimeout(playTurn, 1000);
     }
 
     function skipTurn() {
@@ -369,7 +432,7 @@
         const card = board[i];
         const ownerIndex = cardOwners[i];
         const div = document.createElement("div");
-        div.className = "domino-card";
+        div.className = "domino-card landscape";
         div.style.borderColor = playerColors[ownerIndex];
         div.innerHTML = `<div>${card[0]}</div><div>${card[1]}</div>`;
         boardDiv.appendChild(div);
