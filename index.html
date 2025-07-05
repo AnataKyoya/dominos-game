@@ -421,9 +421,9 @@
           }
 
           if (players[currentPlayer].length === 0) {
+            gameOver = true;
             updateUI();
             alert(`Pemain ${currentPlayer + 1} menang!`);
-            gameOver = true;
             showControlsAgain();
             return;
           }
