@@ -341,6 +341,227 @@
       return estimasi;
     }
 
+    function theRealBeast(board, hand) {
+        let LOG = []; // tempat log lengkap
+
+        const pushLog = (msg, data = null) => {
+            LOG.push({ msg, data });
+        };
+
+        // ================== UTILITIES ==================
+        function jumlahKartu(from) {
+            let hasil = [0, 0, 0, 0, 0, 0, 0];
+            for (let [a, b] of from) {
+                if (a === b) {
+                    hasil[a] += 2;
+                } else {
+                    hasil[a] += 1;
+                    hasil[b] += 1;
+                }
+            }
+            return hasil;
+        }
+
+        function getBoardCondition(board) {
+            if (board.length === 0) return [null, null];
+            return [board[0][0], board[board.length - 1][1]];
+        }
+
+        function canMatch(boardA, boardB, card) {
+            if (boardA === null) return true;
+            return card.includes(boardA) || card.includes(boardB);
+        }
+
+        // ================== FALLBACK 1 ==================
+        function fallback_startStrong(hand) {
+            pushLog("FALLBACK: Board kosong → cari kartu terbesar", hand);
+
+            const doubles = hand.filter((c) => c[0] === c[1]);
+            if (doubles.length) {
+                let pick = doubles.sort((a, b) => b[0] - a[0])[0];
+                pushLog("Ambil double terbesar", pick);
+                return pick;
+            }
+
+            let pick = hand.sort((a, b) => b[0] + b[1] - (a[0] + a[1]))[0];
+            pushLog("Ambil kartu dengan total terbesar", pick);
+            return pick;
+        }
+
+        // ================== FALLBACK 3 ==================
+        function pickByPotential(hand, freqBoard, freqHand) {
+            pushLog("FALLBACK: Pilih berdasarkan potensi angka", {
+                freqBoard,
+                freqHand,
+            });
+
+            let result = hand
+                .map((c) => {
+                    const [a, b] = c;
+                    const potential =
+                        freqBoard[a] + freqBoard[b] + freqHand[a] + freqHand[b];
+                    pushLog("Hitung potensi kartu", { card: c, potential });
+                    return { card: c, potential };
+                })
+                .sort((x, y) => y.potential - x.potential)[0].card;
+
+            pushLog("Kartu hasil potensi tertinggi", result);
+            return result;
+        }
+
+        // ================== FALLBACK 4 ==================
+        function tieBreaker(cards) {
+            pushLog("FALLBACK: Tie-breaker (hindari double dulu)", cards);
+            const nonDouble = cards.filter((c) => c[0] !== c[1]);
+            if (nonDouble.length) {
+                pushLog("Ambil non-double", nonDouble[0]);
+                return nonDouble[0];
+            }
+            pushLog("Semua double → pakai pertama", cards[0]);
+            return cards[0];
+        }
+
+        // ================== STRATEGI BLOCK + BUILD ==================
+        function blockAndMove(board, valid, freqBoard, freqHand) {
+            const [boardA, boardB] = getBoardCondition(board);
+
+            pushLog("Hitung strategi block + build", {
+                boardA,
+                boardB,
+                freqBoard,
+                freqHand,
+            });
+
+            let maxBoard = Math.max(...freqBoard);
+            let angkaAncaman = freqBoard.indexOf(maxBoard);
+
+            let maxHand = Math.max(...freqHand);
+            let angkaKuat = freqHand.indexOf(maxHand);
+
+            pushLog("Ancaman terbesar di board", {
+                angkaAncaman,
+                freq: maxBoard,
+            });
+            pushLog("Angka terkuat di hand", { angkaKuat, freq: maxHand });
+
+            let result = {};
+            let score = 0;
+
+            // BLOCK
+            if (freqBoard[angkaAncaman] >= 5) {
+                score = 8;
+                let way = boardA === angkaAncaman ? "l" : "r";
+
+                result = {
+                    type: "block",
+                    score,
+                    angka: angkaAncaman,
+                    way,
+                };
+
+                pushLog("Keputusan: BLOCK", result);
+                return result;
+            }
+
+            // BUILD
+            score = 5;
+            let way = boardA === angkaKuat ? "l" : "r";
+
+            result = {
+                type: "build",
+                score,
+                angka: angkaKuat,
+                way,
+            };
+
+            pushLog("Keputusan: BUILD", result);
+            return result;
+        }
+
+        // =============================================================
+        // ===================== MAIN EXEC =============================
+        // =============================================================
+
+        const [boardA, boardB] = getBoardCondition(board);
+        pushLog("Kondisi Board", { boardA, boardB });
+
+        const freqBoard = jumlahKartu(board);
+        const freqHandAll = jumlahKartu(hand);
+
+        pushLog("Frekuensi board", freqBoard);
+        pushLog("Frekuensi hand (full)", freqHandAll);
+
+        const valid = hand.filter((c) => canMatch(boardA, boardB, c));
+        const freqHand = jumlahKartu(valid);
+
+        pushLog("Valid cards", valid);
+        pushLog("Frekuensi hand (valid only)", freqHand);
+
+        // =============================================================
+        // FALLBACK 1: Board kosong
+        // =============================================================
+        if (board.length === 0) {
+            pushLog("CASE: Board kosong → fallback_startStrong()");
+            const chosen = fallback_startStrong(hand);
+            return [{ card: chosen, com: "fallback_start", w: "l", log: LOG }];
+        }
+
+        // =============================================================
+        // FALLBACK 2: Tidak ada kartu cocok
+        // =============================================================
+        if (valid.length === 0) {
+            pushLog("CASE: Tidak ada kartu cocok → skip");
+            return [{ card: null, com: "DRAW_OR_SKIP", w: "-", log: LOG }];
+        }
+
+        // =============================================================
+        // STRATEGI UTAMA
+        // =============================================================
+        pushLog("CASE: Strategi utama dijalankan");
+
+        const core = blockAndMove(board, valid, freqBoard, freqHand);
+
+        let order = valid.map((card) => {
+            let totalScore = core.score * 1.2;
+
+            pushLog("Hitung skor kartu", { card, totalScore, strategy: core });
+
+            return {
+                card,
+                totalScore,
+                w: core.way,
+                com: core.type,
+            };
+        });
+
+        order.sort((a, b) => b.totalScore - a.totalScore);
+
+        // Keputusan utama valid
+        if (order[0].totalScore > 0) {
+            pushLog("HASIL UTAMA", order[0]);
+            order[0].log = LOG;
+            return order;
+        }
+
+        // =============================================================
+        // FALLBACK 3: Potensi angka
+        // =============================================================
+        pushLog("Fallback: Tidak ada skor utama yang jelas");
+
+        const potensial = pickByPotential(valid, freqBoard, freqHand);
+
+        // =============================================================
+        // FALLBACK 4: Tie-breaker
+        // =============================================================
+        const finalCard = tieBreaker([potensial]);
+
+        pushLog("Hasil fallback akhir", finalCard);
+
+        return [
+            { card: finalCard, com: "fallback_potential", w: "l", log: LOG },
+        ];
+    }
+
     function playTurn() {
       if (gameOver) return;
       updateUI();
@@ -378,46 +599,19 @@
             players[currentPlayer].splice(index, 1);
             placeCard(chosen);
           } else if (aiMode === "pro") {
-            const freq = {};
-            hand.forEach(([a, b]) => {
-              freq[a] = (freq[a] || 0) + 1;
-              freq[b] = (freq[b] || 0) + 1;
-            });
+            let pro = theRealBeast(board, myHand);
+            let way = "";
             
-            const estimasiLawan = estimasiAngkaDimilikiLawan();
+            const chosen = pro[0].card;
+            if (pro[0].w === "l") {
+              way = "left";
+            } else if (pro[0].w = "r") {
+              way = "right";
+            }
             
-            const scored = valid.map(card => {
-                const [a, b] = card;
-                let score = 0;
-                const isDouble = a === b;
-                if (isDouble) score -= 15;
-                score += (freq[a] + freq[b]) * 10;
-                score += (a + b);
-                if (angkaMuncul[a] > 3) score -= 5;
-                if (angkaMuncul[b] > 3) score -= 5;
-                
-                if (estimasiLawan.includes(a)) score -= 8; // penalti jika AI membuka angka yang lawan mungkin punya
-                if (estimasiLawan.includes(b)) score -= 8;
-                if (isBlockingMove(card)) score += 30; // Strategi blocking
-                return { card, score };
-            });
-
-            scored.sort((x, y) => {
-              const xBlock = isBlockingMove(x.card);
-              const yBlock = isBlockingMove(y.card);
-            
-              // Prioritaskan kartu yang bisa blocking
-              if (xBlock && !yBlock) return -1;
-              if (!xBlock && yBlock) return 1;
-            
-              // Jika dua-duanya blocking atau tidak, bandingkan skor biasa
-              return y.score - x.score;
-            });
-            
-            const chosen = scored[0].card;
             const index = hand.findIndex(c => c[0] === chosen[0] && c[1] === chosen[1]);
             players[currentPlayer].splice(index, 1);
-            placeCard(chosen);
+            placeCard(chosen, way);
           }
 
           if (players[currentPlayer].length === 0) {
