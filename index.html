@@ -607,6 +607,8 @@
               way = "left";
             } else if (pro[0].w = "r") {
               way = "right";
+            } else {
+              way = null
             }
             
             const index = hand.findIndex(c => c[0] === chosen[0] && c[1] === chosen[1]);
