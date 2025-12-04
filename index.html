@@ -599,7 +599,7 @@
             players[currentPlayer].splice(index, 1);
             placeCard(chosen);
           } else if (aiMode === "pro") {
-            let pro = theRealBeast(board, myHand);
+            let pro = theRealBeast(board, hand);
             let way = "";
             
             const chosen = pro[0].card;
